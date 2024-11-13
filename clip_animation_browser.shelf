@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shelfDocument>
+  <!-- This file contains definitions of shelves, toolbars, and tools.
+ It should not be hand-edited when it is being used by the application.
+ Note, that two definitions of the same element are not allowed in
+ a single file. -->
+
+  <toolshelf name="clip_animation_browser" label="Clip Animation Browser">
+    <memberTool name="clip_animation_browser"/>
+  </toolshelf>
+
+  <tool name="clip_animation_browser" label="Clip Animation Browser" icon="COP2_switchalpha">
+    <script scriptType="python"><![CDATA[# Import necessary modules.
+import ffmpeg
+import os
+from PySide2 import QtWidgets, QtCore, QtGui
+
+class Clip_Animation_Browser(QtWidgets.QWidget):
+        """
+        Window to select and import your animations.
+        
+        It is the principal UI.
+        """
+
+        def __init__(self):
+                super().__init__()
+
+                # Window settings.
+                self.setWindowTitle("Clip Animation Browser")
+                self.setFixedSize(1080, 720)
+
+                # Apply the Houdini stylesheet.
+                self.setStyleSheet(hou.qt.styleSheet())
+
+                # Build layout.
+                self.build_layout()
+
+        def build_layout(self):
+                """Set up the layout."""
+
+                # Set vertical layout.
+                lyt_window = QtWidgets.QVBoxLayout()
+                self.setLayout(lyt_window)
+
+                # Groupbox to select Tpose model and folder with animations.
+                gb_settings = QtWidgets.QGroupBox()
+                gb_settings.setMaximumHeight(130)
+                gb_settings.setContentsMargins(5, 5, 5, 5)
+
+                # New grid layout to that groupbox.
+                lyt_gb_settings = QtWidgets.QGridLayout()
+                lyt_gb_settings.setSpacing(5)
+                gb_settings.setLayout(lyt_gb_settings)
+                lyt_window.addWidget(gb_settings)
+
+                # Groupbox that will contain animations clips.
+                gb_browser = QtWidgets.QGroupBox()
+                lyt_gb_browser = QtWidgets.QGridLayout()
+                gb_browser.setLayout(lyt_gb_browser)
+                lyt_window.addWidget(gb_browser)
+
+                # Search filter layout.
+                self.lyt_gb_browser_top = QtWidgets.QHBoxLayout()
+                self.lyt_gb_browser_top.setAlignment(QtCore.Qt.AlignTop)
+                lyt_gb_browser.addLayout(self.lyt_gb_browser_top,0,0, 1, 4)
+
+                # Text info.
+                lyt_gb_settings.addWidget(
+                QtWidgets.QLabel("Select your FBX Tpose model"), 0, 0)
+
+                # FBX Tpose model directory.
+                self.fbx_model = QtWidgets.QLineEdit()
+                self.fbx_model.setReadOnly(True)
+                lyt_gb_settings.addWidget(self.fbx_model, 1,0)
+
+                # Button to select FBX Tpose model.
+                self.btn_select_fbx = QtWidgets.QPushButton("Select Model")
+                self.btn_select_fbx.clicked.connect(self.select_fbx)
+                lyt_gb_settings.addWidget(self.btn_select_fbx, 1,1)
+
+                # Text info.
+                lyt_gb_settings.addWidget( QtWidgets.QLabel(
+                "Select your folder with the animations"), 2, 0)
+
+                # Folder with animations.
+                self.anim_folder = QtWidgets.QLineEdit()
+                self.anim_folder.setReadOnly(True)
+                lyt_gb_settings.addWidget(self.anim_folder, 3, 0)
+
+                # Button to select animations folder.
+                self.btn_select_folder = QtWidgets.QPushButton(
+                        "Select Folder")
+                self.btn_select_folder.clicked.connect(self.select_folder)
+                self.btn_select_folder.setEnabled(False)
+                lyt_gb_settings.addWidget(self.btn_select_folder, 3, 1)
+
+                # Search line to filter animations.
+                self.search_line = QtWidgets.QLineEdit()
+                self.search_line.setReadOnly(True)
+                self.search_line.setPlaceholderText("Search animations")
+                self.search_line.textChanged.connect(self.text_changed)
+                self.lyt_gb_browser_top.addWidget(self.search_line)
+
+                # Button to create Agent Clip node with selected animations.
+                self.btn_import_anim = QtWidgets.QPushButton(
+                        "Create Agent Clip Node")
+                self.btn_import_anim.setEnabled(False)
+                self.btn_import_anim.clicked.connect(self.import_animations)
+                self.lyt_gb_browser_top.addWidget(self.btn_import_anim)
+
+                # Button to load animations to the ui.
+                self.btn_load_animations = QtWidgets.QPushButton(
+                        "Load Animations")
+                self.btn_load_animations.setEnabled(False)
+                self.btn_load_animations.clicked.connect(
+                        self.load_animations)
+                self.lyt_gb_browser_top.addWidget(self.btn_load_animations)
+
+                # Scroll content with all agent clips.
+                scroll_content = QtWidgets.QWidget()
+                self.lyt_scroll_content = QtWidgets.QGridLayout()
+                scroll_content.setLayout(self.lyt_scroll_content)
+
+                # Scroll widget.
+                scroll_area = QtWidgets.QScrollArea()
+                scroll_area.setWidget(scroll_content)
+                scroll_area.setWidgetResizable(True)
+
+                # Add scroll to ui.
+                lyt_gb_browser.addWidget(scroll_area, 1, 0, 1, 4)
+                scroll_content.setSizePolicy(
+                        QtWidgets.QSizePolicy.Expanding,
+                        QtWidgets.QSizePolicy.Expanding)
+
+        def select_fbx(self):
+                """Window to select your FBX tpose model."""
+                
+                # Get the previously selected path.
+                prev_file_path = os.path.dirname(self.fbx_model.text())
+
+                # Open window.
+                window_select_file = QtWidgets.QFileDialog.getOpenFileName(
+                        self,
+                        "Select your fbx model",
+                        prev_file_path,
+                        "FBX Files (*.fbx)"
+                        )
+
+                # Keep the file.
+                selected_file = window_select_file[0]
+
+                # If there is no selection, return.
+                if not os.path.exists(selected_file):
+                        return
+
+                # Set path and enable folder select button.
+                self.fbx_model.setText(selected_file)
+                self.btn_select_folder.setEnabled(True)
+
+        def select_folder(self):
+                """Window to select folder with animations."""
+
+                # Get the previously selected path.
+                prev_dir = os.path.dirname(self.anim_folder.text())
+
+                # Open window.
+                sel_folder = QtWidgets.QFileDialog.getExistingDirectory(
+                        self, 
+                        "Select animations folder",
+                        prev_dir,
+                        )
+
+                # If there is a selected folder.
+                if sel_folder != "":
+
+                        # Set folder and enable the button to load clips.
+                        self.anim_folder.setText(sel_folder)
+                        self.btn_load_animations.setEnabled(True)
+
+                        # Get all animations files in a list.
+                        all_files = os.listdir(sel_folder)
+                        self.animations = []
+
+                        for file in all_files:
+                                if file.endswith(".fbx"):
+                                        self.animations.append(file)
+
+        def text_changed(self, txt):
+                """Filter clips to view matching clips."""
+
+                # Start position counters.
+                count_v = 0
+                count_h = 0
+
+                # If ther is no filter, show all clips.
+                if txt == "":
+                        for clip in self.all_clips:
+                                clip.show()
+                                self.lyt_scroll_content.addWidget(
+                                        clip, count_h, count_v)
+                                count_v += 1
+                                if count_v >= 4:
+                                        count_v = 0
+                                        count_h += 1
+
+                #Show only clips that match the name.
+                else:
+                        for clip in self.all_clips:
+                                if txt.lower() in clip.file_name.lower():
+                                        clip.show()
+                                        self.lyt_scroll_content.addWidget(
+                                                clip, count_h, count_v)
+                                        count_v += 1
+                                        if count_v >= 4:
+                                                count_v = 0
+                                                count_h += 1
+                                else:
+                                        clip.hide()
+
+        def import_animations(self):
+                """Create an agent clip node with selected animations."""
+
+                # New list to save selected clips.
+                selected_clips = []
+                
+                # Append selected clips to the list.
+                for clip in self.all_clips:
+                        if clip.is_selected == True:
+                                selected_clips.append(clip)
+
+                # If no clips are selected, show message and return.
+                if len(selected_clips) == 0:
+                        hou.ui.displayMessage(
+                                "There are no clips selected",
+                                severity=hou.severityType.Error)
+                        self.activateWindow()
+                        return
+
+                # Create a new Geometry node.
+                geo = hou.node("/obj/").createNode("geo")
+
+                # Create an Agent node.
+                agent = geo.createNode("agent")
+
+                # Set up Agent node.
+                agent.parm("input").set(2)
+                agent.parm("fbxfile").set(self.fbx_model.text())
+
+                # Create Agent clip node.
+                agent_clip = agent.createOutputNode("agentclip")
+                agent_clip.parm("clips").set(len(selected_clips))
+
+                # Iter for all clips to be added.
+                i = 1
+                for clip in selected_clips:
+
+                        # Set parms.
+                        agent_clip.parm(f"source{i}").set(1)
+                        agent_clip.parm(f"name{i}").set(clip.file_name)
+
+                        # Get clip animation path, and apply to parameter.
+                        clip_path = os.path.join(
+                                self.anim_folder.text(), clip.file)
+                        agent_clip.parm(f"file{i}").set(clip_path)
+
+                        i += 1
+
+                # End confirmation message.
+                hou.ui.displayMessage("Agent clip node created.")
+                
+                # Close ui.
+                self.close()
+
+        def load_animations(self):
+                """Add all animations videos to the ui."""
+
+                # Disable buttons.
+                self.btn_select_folder.setEnabled(False)
+                self.btn_select_fbx.setEnabled(False)
+                self.search_line.setReadOnly(False)
+                self.btn_import_anim.setEnabled(True)
+                self.btn_load_animations.hide()
+
+                # Create widgets with video clips.
+                self.create_widgets()
+
+        def create_widgets(self):
+                """
+                Create one widget for each fbx animation in the
+                selected folder.
+                """
+
+                # Create necessary nodes to make videos preview.
+                obj = hou.node("/obj")
+                geo = obj.createNode("geo", "temp_geo")
+                agent_node = geo.createNode("agent")
+                center_node = agent_node.createOutputNode("matchsize")
+                clip_node = center_node.createOutputNode("agentclip")
+                wr_clip_data = clip_node.createOutputNode("attribwrangle")
+                cam = obj.createNode("cam", "temp_camera")
+
+                # Create an OpenGL.
+                out = hou.node("/out/")
+                opengl_node = out.createNode("opengl","render_clip")
+                
+                # OpenGL set parms.
+                opengl_node.parm("trange").set(1)
+                opengl_node.parm("camera").set(cam.path())
+                opengl_node.parm("vobjects").set(geo.name())
+
+                # Configure camera.
+                cam.parm("tx").setExpression(
+                        f"centroid('{clip_node.path()}', D_X)")
+                cam.parm("ty").setExpression(
+                        f"centroid('{clip_node.path()}', D_Y)+0.2")
+                cam.parm("tz").setExpression(
+                        f"centroid('{clip_node.path()}', D_Z)+3.8")
+                cam.parmTuple("res").set((240,240))
+
+                # Set fbx tpose model.
+                agent_node.parm("input").set(2)
+                agent_node.parm("fbxfile").set(self.fbx_model.text())
+                
+                # Set agent clip node parameters.
+                clip_node.parm("setcurrentclip").set(1)
+                clip_node.parm("currentclip").set("clip")
+                clip_node.parm("name1").set("clip")
+                clip_node.parm("source1").set(1)
+                clip_node.setDisplayFlag(1)
+                clip_node.setRenderFlag(True)
+
+                # Wrangle code to get the clip duration.
+                code = """
+string clip_name = "clip";
+float seconds = agentcliplength(0,0,clip_name);
+i@duration = seconds * $FPS;
+                """
+                wr_clip_data.parm("snippet").set(code)
+
+                # Folder where images and videos will be exported.
+                export_dir = self.anim_folder.text() + \
+                "/clip_animation_browser_videos/"
+
+                # New list to save the widgets that will be created.
+                self.all_clips = []
+
+                # Init position counters.
+                count_v = 0
+                count_h = 0
+
+                # Iter for each animation in the selected folder.
+                for file in self.animations:
+
+                        # Create a instance of Clip_Animation.
+                        new_clip = Clip_Animation(
+                                cam,
+                                opengl_node,
+                                clip_node,
+                                wr_clip_data,
+                                file,
+                                self.anim_folder.text(),
+                                export_dir
+                                )
+
+                        # Add that instance to the layout.
+                        self.lyt_scroll_content.addWidget(
+                                new_clip, count_h, count_v)
+                        
+                        # Add instance to the list.
+                        self.all_clips.append(new_clip)
+
+                        # Modify counters.
+                        count_v += 1
+                        if count_v >= 4:
+                                count_v = 0
+                                count_h += 1
+
+                # Destroy nodes.
+                geo.destroy()
+                opengl_node.destroy()
+                cam.destroy()
+
+
+class Clip_Animation(QtWidgets.QWidget):
+        """
+        Widget containing a preview of an animation clip.
+
+        Parameters:
+                cam (houdini camera): Camera used to capture the video.
+
+                opengl_node (houdini_node): Node for render.
+
+                clip_node (houdini_node): Node where the animation clip
+                        is inserted to preview.
+
+                wr_clip_data (houdini_node): Node used to know the
+                        clip duration.
+
+                file (str): Animation file.
+
+                anim_folder (str): Folder where the file is.
+
+                export_dir (str): Directory where images and videos
+                        will be exported.
+        """
+
+        def __init__(self, cam, opengl_node, clip_node, wr_clip_data, file, anim_folder, export_dir):
+                super().__init__()
+
+                # Public variables.
+                self.cam = cam
+                self.opengl_node = opengl_node
+                self.clip_node = clip_node
+                self.clip_data = wr_clip_data
+                self.file = file
+                self.anim_folder = anim_folder
+                self.export_dir = export_dir
+
+                self.file_name = file.replace(".fbx", "")
+
+                # Widget size.
+                self.setFixedSize(240, 265)
+
+                # To check if this clip is selected.
+                self.is_selected = False
+
+                # Build layout.
+                self.build_layout()
+
+        def build_layout(self):
+                """Set layout."""
+
+                # Set vertical layout.
+                lyt = QtWidgets.QVBoxLayout()
+                self.setLayout(lyt)
+
+                # Out video path.
+                video_path = f"{self.export_dir}{self.file_name}.gif"
+
+                # If video doesn't exist, create it.
+                if not os.path.exists(video_path):
+
+                        # Render images.
+                        self.create_images()
+
+                        # Create Video.
+                        self.create_video()
+
+                        # Delete images.
+                        self.delete_images()
+
+                # Name of the animation.
+                txt_label = QtWidgets.QLabel()
+                txt_label.setText(self.file_name)
+                txt_label.setAlignment(QtCore.Qt.AlignCenter)
+                lyt.addWidget(txt_label)
+
+                # New label to contain the video.
+                self.video_label = QtWidgets.QLabel()
+                self.video_label.setStyleSheet(
+                        "QWidget { border: 1px solid red; }")
+                
+                # Video widget settings.
+                self.video = QtGui.QMovie()
+                self.video.setFileName(video_path)
+                self.video_label.setMovie(self.video)
+                self.video.setScaledSize(QtCore.QSize(240,240))
+                self.video.jumpToFrame(0)
+
+                # Add video label to layout.
+                self.video_label.setAlignment(QtCore.Qt.AlignCenter)
+                lyt.addWidget(self.video_label)
+
+        def create_images(self):
+                """
+                Create all images that will be used to create a video.
+                """
+
+                # Animation fbx path.
+                file_path = os.path.join(self.anim_folder, self.file)
+
+                # Set animation file in clip node.
+                self.clip_node.parm("file1").set(file_path)
+
+                # Get clip duration (in frames).
+                clip_geo = self.clip_data.geometry()
+                point = clip_geo.points()[0]
+                self.duration = point.attribValue("duration")
+
+                # Set the frame range in OpenGL node.
+                self.opengl_node.parmTuple("f").set((1,self.duration,1))
+
+                # Set path to export images on OpenGL node.
+                img_path = f"{self.export_dir}{self.file_name}.$F4.png"
+                self.opengl_node.parm("picture").set(img_path)
+
+                # Generate images.
+                self.opengl_node.parm("execute").pressButton()
+
+        def create_video(self):
+                """Create a video using images."""
+
+                # Sequence of images.
+                input_sequence = ffmpeg.input(
+                        self.export_dir + self.file_name +".%04d.png",
+                        start_number=1,
+                        framerate=24
+                        )
+                
+                # Output video path.
+                output_path = self.export_dir + self.file_name + ".gif"
+
+                # Video settings.
+                output_gif = input_sequence.output(
+                        output_path,
+                        vf="scale=240:-1",
+                        pix_fmt='rgb24',
+                        loop=0
+                        )
+
+                # Create video.
+                output_gif.run(
+                        capture_stdout=True,
+                        capture_stderr=True,
+                        overwrite_output=True
+                        )
+
+        def delete_images(self):
+                """Delete all images created before."""
+
+                # Iter for each file in export folder.
+                for file in os.listdir(self.export_dir):
+
+                        # Remove the images.
+                        if file.endswith(".png"):
+                                file_path = os.path.join(self.export_dir, file)
+                                os.remove(file_path)
+
+        def mousePressEvent(self, event):
+                """Select or deselect this clip."""
+
+                if event.button() == QtCore.Qt.LeftButton:
+
+                        # If it is not selected.
+                        if self.is_selected == False:
+
+                                # Select.
+                                self.is_selected = True
+                                
+                                # Modify StyleSheet.
+                                self.video_label.setStyleSheet(
+                                        "QWidget { border: 1px solid green; }")
+                        else:
+                                # Deselect.
+                                self.is_selected = False
+                                
+                                # Modify StyleSheet.
+                                self.video_label.setStyleSheet(
+                                        "QWidget { border: 1px solid red; }")
+
+        def enterEvent(self, event):
+                """Start clip preview."""
+
+                # Start clip and modify stylesheet.
+                self.video.start()
+                self.video_label.setStyleSheet(
+                        "QWidget { border: 1px solid yellow; }")
+
+        def leaveEvent(self, event):
+                """Pausar clip."""
+
+                # Stop clip.
+                self.video.stop()
+
+                # Go to frame 1.
+                self.video.jumpToFrame(0)
+
+                # Modify stylesheet.
+                if self.is_selected == True:
+                        self.video_label.setStyleSheet(
+                                "QWidget { border: 1px solid green; }")
+                else:
+                        self.video_label.setStyleSheet(
+                                "QWidget { border: 1px solid red; }")
+
+
+ui = Clip_Animation_Browser()
+ui.show()]]></script>
+  </tool>
+</shelfDocument>
