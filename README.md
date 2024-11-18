@@ -9,10 +9,10 @@ You can also filter them to easily find specific clips that you want.
 2) In houdini you have to add the shelf to your workspace.
 
 ### Attention:
-The first time the tool will make one video for each fbx animation file you have.
-It may take a few seconds per clip depending on its duration.
-
-Don't worry if terminal windows opens and close while the process! It's ffmpeg saving the video in your folder with animations.
+1. The first time the tool will make one video for each fbx animation file you have.
+  It may take a few seconds per clip depending on its duration.
+2. It is required to have ffmpeg installed.
+3. Don't worry if terminal windows opens and close while the process! It's ffmpeg saving the video in your folder with animations.
 
 #### Image Example:
 ![Clip Animation Browser_foto2](https://github.com/user-attachments/assets/45c449ea-1af3-4793-9b31-6d49ae5e1705)
